@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+import re
+import os
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
+
+LOG_PATH = "console_recorder.log"
+EXIT_CMD = "exit"
+REDACT_NUMS = re.compile(r"\b\d{12,}\b")
+
+def redact(text: str) -> str:
+    """Replace long numeric sequences with [REDACTED]."""
+    return REDACT_NUMS.sub("[REDACTED]", text)
+
+def setup_logger(path: str, max_bytes: int = 500_000, backups: int = 3) -> logging.Logger:
+    """Create rotating file logger with safe permissions."""
+    logger = logging.getLogger("console_recorder")
+    logger.setLevel(logging.INFO)
+    if not any(isinstance(h, RotatingFileHandler) and hasattr(h, 'baseFilename') and h.baseFilename.endswith(path)
+               for h in logger.handlers):
+        handler = RotatingFileHandler(path, maxBytes=max_bytes, backupCount=backups)
+        fmt = logging.Formatter("%(asctime)s %(message)s", "%Y-%m-%d %H:%M:%S")
+        handler.setFormatter(fmt)
+        logger.addHandler(handler)
+        logger.propagate = False
+        try:
+            open(path, "a").close()
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
+    return logger
+
+def simulated_mode():
+    """Simulated mode for online IDEs."""
+    print("Running in SIMULATED mode (for online platforms like Replit or Colab).")
+    test_inputs = [
+        "I consent",
+        "Testing simple log entry",
+        "User entered 123456789012",
+        "exit"
+    ]
+    logger = setup_logger(LOG_PATH)
+    for line in test_inputs:
+        print(f"Simulated input: {line}")
+        if line.strip().lower() == EXIT_CMD:
+            print(f"\nStopped. Log saved to {os.path.abspath(LOG_PATH)}")
+            break
+        safe_line = redact(line)
+        logger.info(safe_line)
+
+def interactive_mode():
+    """Interactive mode for local environments."""
+    print("Running in INTERACTIVE mode (local terminal/Kali Linux).")
+    print("Type 'I consent' to start recording, or anything else to cancel.")
+    consent = input("> ").strip().lower()
+    if consent != "i consent":
+        print("Consent not given — exiting.")
+        return
+    logger = setup_logger(LOG_PATH)
+    print(f"Recording started. Type '{EXIT_CMD}' alone on a line to stop.\n")
+    while True:
+        line = input("> ")
+        if line.strip().lower() == EXIT_CMD:
+            print(f"Stopped. Log saved to {os.path.abspath(LOG_PATH)}")
+            break
+        safe_line = redact(line)
+        logger.info(safe_line)
+
+if __name__ == "__main__":
+    print("Select mode:\n1. Simulated mode (for online use)\n2. Interactive mode (for local use)")
+    choice = input("Enter 1 or 2: ").strip()
+    if choice == "1":
+        simulated_mode()
+    else:
+        interactive_mode()
